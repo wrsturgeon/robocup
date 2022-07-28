@@ -30,6 +30,13 @@ then
   EXIT_CODE=1
 fi
 
+# Assert no manual "gtest/gtest.h"
+if grep -Rn ./src ./test -e 'gtest/gtest.h' --exclude=gtest.hpp
+then
+  echo -e "Please #include "gtest.hpp" instead of "gtest/gtest.h" to avoid 3rd-party errors showing up as ours\n"
+  EXIT_CODE=1
+fi
+
 # Assert no manual "macros_*.hpp"
 if grep -Rn ./src -e '#include "macros_'
 then
@@ -44,10 +51,10 @@ then
   EXIT_CODE=1
 fi
 
-# Assert no manual "eigen_matrix_plugins.hpp"
-if grep -Rn ./src -e 'eigen_matrix_plugins.hpp' --exclude=eigen.hpp
+# Assert no manual "eigen_array_plugins.hpp"
+if grep -Rn ./src -e 'eigen_array_plugins.hpp' --exclude=eigen.hpp
 then
-  echo -e "Please don't manually #include "eigen_matrix_plugins.hpp"; it's included in Eigen::Matrix\n"
+  echo -e "Please don't manually #include "eigen_array_plugins.hpp"; it's included in Eigen::Array\n"
   EXIT_CODE=1
 fi
 
@@ -114,8 +121,7 @@ do
       if [ ! -z "${LAST_INCLUDE}" ] && [ ${LAST_INCLUDE} -gt "${LAST_NAMESPACE}" ]
       then
         echo "Please make sure all headers are #include'd before opening a namespace in ${file}"
-        echo "Last #include on line ${LAST_INCLUDE}; last namespace on line ${LAST_NAMESPACE}"
-        echo
+        echo -e "Last #include on line ${LAST_INCLUDE}; last namespace on line ${LAST_NAMESPACE}\n"
         EXIT_CODE=1
       fi
     fi
@@ -125,9 +131,9 @@ do
       TEST_FILE="./test/src/${dirname}/${filename::${#filename}-3}cpp"
       if [ -f ${TEST_FILE} ]
       then
-        if [ "$(head -n1 ${TEST_FILE})" != '#include "'${dirname}/${filename}'"' ]
+        if [ "$(head -n2 ${TEST_FILE} | tr -d '\n')" != '#include "gtest.hpp"#include "'${dirname}/${filename}'"' ]
         then
-          echo -e "Please #include \"${dirname}/${filename}\" on the first line of ${TEST_FILE}"
+          echo -e "Please #include \"gtest.hpp\" on the first line of ${TEST_FILE} and \"${dirname}/${filename}\" on the second\n"
           EXIT_CODE=1
         fi
       else

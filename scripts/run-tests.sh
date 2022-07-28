@@ -23,21 +23,40 @@ fi
 
 
 
+echo 'Compiling GoogleTest...'
+clang++ -c -o ./gtest.o ../googletest/googletest/src/gtest-all.cc ${ALL_FLAGS} -iquote ../googletest/googletest -iquote ../googletest/googletest/include -w
+clang++ -c -o ./gtest_main.o ../googletest/googletest/src/gtest_main.cc ${ALL_FLAGS} -iquote ../googletest/googletest -iquote ../googletest/googletest/include -w
+
+
+
 echo 'Checking compilation, coverage, and memory leaks...'
+EXIT_CODE=0
 # Now make sure, knowing we can detect them, that there aren't any (TODO: we don't actually run these yet--implement unit testing)
 for file in $(find ../test/src -type f)
 do
-  echo "Running ${file}..."
-  clang++ -o ./run_test ${file} ${ALL_FLAGS} ${SANITIZE} -Wno-error=unused-function
-  ./run_test
+  echo "Analyzing ${file}..."
   FNAME=$(echo ${file::${#file}-4} | rev | cut -d/ -f1 | rev)
-  clang++ -o ./${FNAME} ${file} ${ALL_FLAGS} ${COVERAGE} -Wno-error=unused-function
-  ./${FNAME} # Generate coverage at the same time
+  echo '  Compiling...'
+  clang++ -o ./${FNAME} ${file} ./gtest.o ./gtest_main.o ${ALL_FLAGS} ${SANITIZE} ${COVERAGE} -Wno-global-constructors -Wno-unknown-warning-option
+  echo '  Running...'
+  if ! ./${FNAME} # Generate coverage at the same time
+  then
+    echo "./${FNAME} failed at runtime"
+    EXIT_CODE=1
+  fi
+  echo '  Fetching coverage data...'
   llvm-profdata merge ./default.profraw -o ./${FNAME}.profdata
   rm ./default.profraw
   HPP=${SRC}/$(echo ${file} | rev | cut -d/ -f2 | rev)/${FNAME}.hpp
-  (llvm-cov report -instr-profile=./${FNAME}.profdata ${FNAME} ${HPP} | sed '3q;d' | xargs ../scripts/parse-coverage.sh) || \
-  (llvm-cov show   -instr-profile=./${FNAME}.profdata ${FNAME} ${HPP}; exit 0) # 0 FOR NOW
+  if ! (llvm-cov report -instr-profile=./${FNAME}.profdata ${FNAME} ${HPP} | sed '3q;d' | xargs ../scripts/parse-coverage.sh)
+  then
+    llvm-cov show -instr-profile=./${FNAME}.profdata ${FNAME} ${HPP}
+    EXIT_CODE=1
+  fi
 done
 rm -f ./run_test
-echo 'All good!'
+if [ ${EXIT_CODE} -eq 0 ]
+then
+  echo 'All good!'
+fi
+exit ${EXIT_CODE}
